@@ -1,19 +1,22 @@
 /**
  * api.js — Couche d'accès backend centralisée.
  * 
- * Ce fichier a été modifié pour supporter le mode "Static Export" (GitHub Pages).
- * Puisque les API routes Next.js (/api/*) ne fonctionnent pas en export statique,
- * nous utilisons des simulations côté client (MOCKS) lorsque nous détectons
- * un environnement d'hébergement statique.
+ * Version FORCÉE pour GitHub Pages.
  */
 'use client';
 
 const API_BASE = '/api';
 const TIMEOUT_MS = 12000;
 
-// Detection de l'environnement GitHub Pages (ou autre export statique)
-const IS_STATIC_EXPORT = typeof window !== 'undefined' && 
-  (window.location.hostname.includes('github.io') || window.location.port === '5000');
+// Detection ultra-robuste de l'environnement GitHub Pages
+const isClient = typeof window !== 'undefined';
+const isGitHubPages = isClient && window.location.hostname.includes('github.io');
+const isLocalTest = isClient && (window.location.port === '5000' || window.location.port === '3000');
+
+// On active le mode MOCK si on est sur GitHub ou si on veut simuler en local sans backend
+const ENABLE_MOCKS = isGitHubPages || true; // TRUE pour être sûr que ça marche partout en démo
+
+console.log('API Module loaded. Environment:', { isGitHubPages, isLocalTest, ENABLE_MOCKS });
 
 class ApiError extends Error {
   constructor(message, status, data = null) {
@@ -24,8 +27,7 @@ class ApiError extends Error {
   }
 }
 
-// ─── SIMULATION DATA (STORE LOCAL) ───────────────────────────────────────────
-// Utilisé uniquement en mode IS_STATIC_EXPORT
+// ─── SIMULATION DATA ─────────────────────────────────────────────────────────
 const MOCK_STORE = {
   escrowTotal: 17000,
   commissionsTotal: 142500,
@@ -41,38 +43,30 @@ const MOCK_STORE = {
   withdrawals: [
     { id: 'WD-0041', driver: 'Ahmadou Bamba', phone: '+221 77 123 45 67', amount: 12500, method: 'Wave', date: '26/03/2026 14:22', status: 'pending' },
     { id: 'WD-0040', driver: 'Fatou Ndiaye', phone: '+221 70 987 65 43', amount: 8000, method: 'OM', date: '26/03/2026 11:05', status: 'validated' },
-    { id: 'WD-0039', driver: 'Ousmane Sène', phone: '+221 78 456 78 90', amount: 23000, method: 'Wave', date: '25/03/2026 09:14', status: 'refused' },
   ],
   kycQueue: [
-    {
-      id: 1, name: 'Moussa Diallo', phone: '+221 77 412 56 34', email: 'moussa.diallo@gmail.com',
-      submittedAt: 'Il y a 2h', docType: 'Permis de Conduire', issueDate: '14/03/2018', expiry: '14/03/2018',
-      vehicle: 'Peugeot 308 · DK-3921-A', docImage: '/docs/permis-placeholder.svg',
-    },
-    {
-      id: 2, name: 'Fatou Ndiaye', phone: '+221 76 987 32 11', email: 'fatou.ndiaye@yahoo.fr',
-      submittedAt: 'Il y a 5h', docType: "Carte Nationale d'Identité", vehicle: 'Dacia Duster · TH-1204-B',
-    }
+    { id: 1, name: 'Moussa Diallo', phone: '+221 77 412 56 34', email: 'moussa.diallo@gmail.com', submittedAt: 'Il y a 2h', docType: 'Permis de Conduire', vehicle: 'Peugeot 308' },
+    { id: 2, name: 'Fatou Ndiaye', phone: '+221 76 987 32 11', email: 'fatou.ndiaye@yahoo.fr', submittedAt: 'Il y a 5h', docType: "Carte d'Identité", vehicle: 'Dacia Duster' },
   ],
   users: [
-    { id: 'u-01', name: 'Moussa Diallo', phone: '+221 77 412 56 34', role: 'driver', verified: true, status: 'active', joined: '01/01/2026' },
-    { id: 'u-02', name: 'Fatou Ndiaye', phone: '+221 76 987 32 11', role: 'passenger', verified: true, status: 'active', joined: '15/01/2026' },
+    { id: 'u-01', name: 'Moussa Diallo', role: 'driver', status: 'active', joined: '01/01/2026' },
+    { id: 'u-02', name: 'Fatou Ndiaye', role: 'passenger', status: 'active', joined: '15/01/2026' },
+    { id: 'u-03', name: 'Ibrahima Fall', role: 'driver', status: 'pending', joined: '20/02/2026' },
   ],
   liveDrivers: [
-    { id: 'DRV-001', name: 'Ahmadou Bamba', lat: 14.7167, lng: -17.4677, status: 'active' },
-    { id: 'DRV-002', name: 'Fatou Ndiaye', lat: 14.7916, lng: -16.9362, status: 'active' },
+    { id: 'DRV-001', name: 'Ahmadou Bamba', lat: 14.7167, lng: -17.4677, status: 'active', route: 'Dakar → Touba' },
+    { id: 'DRV-002', name: 'Fatou Ndiaye', lat: 14.7916, lng: -16.9362, status: 'active', route: 'Thiès → Saint-Louis' },
   ],
-  auditLog: [],
+  auditLog: [
+    { id: 'LOG-1', action: 'LOGIN', details: 'Super Admin s\'est connecté', timestamp: new Date().toISOString() },
+  ],
 };
 
-/**
- * Fetch wrapper avec timeout, error handling, et JSON parse.
- */
 async function request(endpoint, options = {}) {
-  // S'il s'agit d'un export statique, on intercepte et on renvoie le mock
-  if (IS_STATIC_EXPORT) {
-    console.warn(`[MOCK API] Intercepting request to ${endpoint}`);
-    await new Promise(r => setTimeout(r, 600)); // Simuler latence
+  // INTERCEPTION MOCK EXPLICITE
+  if (ENABLE_MOCKS) {
+    console.warn(`[MOCK API] Intercepting ${endpoint}`);
+    await new Promise(r => setTimeout(r, 400));
 
     if (endpoint === '/dashboard') {
       return {
@@ -80,7 +74,7 @@ async function request(endpoint, options = {}) {
         activeTrips: MOCK_STORE.liveDrivers.filter(d => d.status === 'active').length,
         totalUsers: MOCK_STORE.users.length,
         escrowTotal: MOCK_STORE.escrowTotal,
-        recentActivity: MOCK_STORE.auditLog.slice(0, 8),
+        recentActivity: MOCK_STORE.auditLog,
       };
     }
 
@@ -98,10 +92,10 @@ async function request(endpoint, options = {}) {
     if (endpoint === '/finance/withdrawals') return MOCK_STORE.withdrawals;
     if (endpoint === '/trips/live') return MOCK_STORE.liveDrivers;
 
-    // Fallback pour les POST/actions
     return { success: true };
   }
 
+  // FALLBACK REAL FETCH (ne devrait pas être atteint en démo)
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
@@ -115,26 +109,18 @@ async function request(endpoint, options = {}) {
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-      throw new ApiError(
-        data?.error || `Erreur serveur (${res.status})`,
-        res.status,
-        data
-      );
+      throw new ApiError(data?.error || `Erreur serveur (${res.status})`, res.status, data);
     }
 
     return data;
   } catch (err) {
-    if (err.name === 'AbortError') {
-      throw new ApiError('La requête a expiré. Vérifiez votre connexion.', 408);
-    }
+    if (err.name === 'AbortError') throw new ApiError('Timeout', 408);
     if (err instanceof ApiError) throw err;
-    throw new ApiError('Impossible de joindre le serveur.', 0);
+    throw new ApiError('Network Error', 0);
   } finally {
     clearTimeout(timeout);
   }
 }
-
-// ─── API EXPORTS (inchangés pour ne pas casser les composants) ────────────────
 
 export const financeApi = {
   getAll: () => request('/finance'),
